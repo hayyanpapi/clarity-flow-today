@@ -1,6 +1,7 @@
 
-import { Moon, Sun, SidebarTrigger } from 'lucide-react';
+import { Moon, Sun, PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useTheme } from './ThemeProvider';
 
 export function Header() {

@@ -1,6 +1,5 @@
-
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Calendar as CalendarIcon } from 'lucide-react';
+import { Plus, Trash2, Calendar as CalendarIcon, Bell, BellOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -11,6 +10,8 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { useNotifications } from '@/hooks/useNotifications';
+import { toast } from '@/hooks/use-toast';
 
 interface Task {
   id: string;
@@ -18,6 +19,7 @@ interface Task {
   completed: boolean;
   priority: 'high' | 'medium' | 'low';
   dueDate?: Date;
+  reminderTime?: Date;
   createdAt: Date;
 }
 
@@ -30,6 +32,9 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
   const [newTask, setNewTask] = useState('');
   const [newPriority, setNewPriority] = useState<'high' | 'medium' | 'low'>('medium');
   const [newDueDate, setNewDueDate] = useState<Date>();
+  const [newReminderTime, setNewReminderTime] = useState<Date>();
+  
+  const { scheduleNotification, requestPermission, permission } = useNotifications();
 
   useEffect(() => {
     const savedTasks = localStorage.getItem('focusflow-tasks');
@@ -37,6 +42,7 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
       const parsedTasks = JSON.parse(savedTasks).map((task: any) => ({
         ...task,
         dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
+        reminderTime: task.reminderTime ? new Date(task.reminderTime) : undefined,
         createdAt: new Date(task.createdAt),
       }));
       setTasks(parsedTasks);
@@ -45,7 +51,19 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
 
   useEffect(() => {
     localStorage.setItem('focusflow-tasks', JSON.stringify(tasks));
-  }, [tasks]);
+    
+    // Schedule notifications for tasks with reminder times
+    tasks.forEach(task => {
+      if (task.reminderTime && !task.completed && task.reminderTime > new Date()) {
+        const delay = task.reminderTime.getTime() - new Date().getTime();
+        scheduleNotification(
+          'Task Reminder',
+          `Don't forget: ${task.text}`,
+          delay
+        );
+      }
+    });
+  }, [tasks, scheduleNotification]);
 
   const addTask = () => {
     if (newTask.trim()) {
@@ -55,11 +73,20 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
         completed: false,
         priority: newPriority,
         dueDate: newDueDate,
+        reminderTime: newReminderTime,
         createdAt: new Date(),
       };
       setTasks([task, ...tasks]);
       setNewTask('');
       setNewDueDate(undefined);
+      setNewReminderTime(undefined);
+      
+      if (newReminderTime && permission !== 'granted') {
+        toast({
+          title: "Enable Notifications",
+          description: "Allow notifications to receive task reminders.",
+        });
+      }
     }
   };
 
@@ -71,6 +98,31 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
 
   const deleteTask = (id: string) => {
     setTasks(tasks.filter(task => task.id !== id));
+  };
+
+  const toggleReminder = (id: string) => {
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+
+    if (task.reminderTime) {
+      // Remove reminder
+      setTasks(tasks.map(t => 
+        t.id === id ? { ...t, reminderTime: undefined } : t
+      ));
+    } else {
+      // Set reminder for 1 hour before due date, or 1 hour from now if no due date
+      const reminderTime = task.dueDate 
+        ? new Date(task.dueDate.getTime() - 60 * 60 * 1000)
+        : new Date(Date.now() + 60 * 60 * 1000);
+      
+      setTasks(tasks.map(t => 
+        t.id === id ? { ...t, reminderTime } : t
+      ));
+      
+      if (permission !== 'granted') {
+        requestPermission();
+      }
+    }
   };
 
   const getPriorityColor = (priority: string) => {
@@ -132,6 +184,47 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
                 />
               </PopoverContent>
             </Popover>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-full sm:w-auto">
+                  <Bell className="w-4 h-4 mr-2" />
+                  {newReminderTime ? format(newReminderTime, "MMM dd, HH:mm") : "Reminder"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 p-4" align="start">
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium">Reminder Date & Time</label>
+                    <Calendar
+                      mode="single"
+                      selected={newReminderTime}
+                      onSelect={(date) => {
+                        if (date) {
+                          const time = newReminderTime || new Date();
+                          date.setHours(time.getHours(), time.getMinutes());
+                          setNewReminderTime(date);
+                        }
+                      }}
+                      className="pointer-events-auto"
+                    />
+                  </div>
+                  <div>
+                    <Input
+                      type="time"
+                      value={newReminderTime ? format(newReminderTime, "HH:mm") : ""}
+                      onChange={(e) => {
+                        if (e.target.value && newReminderTime) {
+                          const [hours, minutes] = e.target.value.split(':');
+                          const newTime = new Date(newReminderTime);
+                          newTime.setHours(parseInt(hours), parseInt(minutes));
+                          setNewReminderTime(newTime);
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
             <Button onClick={addTask} className="w-full sm:w-auto">
               <Plus className="w-4 h-4 mr-2" />
               Add
@@ -169,17 +262,32 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
                           {format(task.dueDate, "MMM dd")}
                         </Badge>
                       )}
+                      {task.reminderTime && (
+                        <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">
+                          🔔 {format(task.reminderTime, "MMM dd, HH:mm")}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                   {!compact && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => deleteTask(task.id)}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    <div className="flex space-x-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleReminder(task.id)}
+                        className={task.reminderTime ? "text-blue-600" : "text-muted-foreground"}
+                      >
+                        {task.reminderTime ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => deleteTask(task.id)}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   )}
                 </div>
               </CardContent>

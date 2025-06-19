@@ -9,7 +9,105 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          created_at: string | null
+          email: string | null
+          full_name: string | null
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      tasks: {
+        Row: {
+          completed: boolean | null
+          created_at: string | null
+          due_date: string | null
+          id: string
+          priority: string | null
+          reminder_time: string | null
+          text: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          completed?: boolean | null
+          created_at?: string | null
+          due_date?: string | null
+          id?: string
+          priority?: string | null
+          reminder_time?: string | null
+          text: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          completed?: boolean | null
+          created_at?: string | null
+          due_date?: string | null
+          id?: string
+          priority?: string | null
+          reminder_time?: string | null
+          text?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      timer_presets: {
+        Row: {
+          break_duration: number
+          created_at: string | null
+          id: string
+          is_default: boolean | null
+          long_break_duration: number
+          name: string
+          sessions_until_long_break: number
+          updated_at: string | null
+          user_id: string
+          work_duration: number
+        }
+        Insert: {
+          break_duration?: number
+          created_at?: string | null
+          id?: string
+          is_default?: boolean | null
+          long_break_duration?: number
+          name: string
+          sessions_until_long_break?: number
+          updated_at?: string | null
+          user_id: string
+          work_duration?: number
+        }
+        Update: {
+          break_duration?: number
+          created_at?: string | null
+          id?: string
+          is_default?: boolean | null
+          long_break_duration?: number
+          name?: string
+          sessions_until_long_break?: number
+          updated_at?: string | null
+          user_id?: string
+          work_duration?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

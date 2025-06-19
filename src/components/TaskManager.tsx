@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import { Plus, Trash2, Calendar as CalendarIcon, Bell, BellOff } from 'lucide-react';
+
+import { useState } from 'react';
+import { Plus, Trash2, Calendar as CalendarIcon, Bell, BellOff, Edit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -12,71 +13,46 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useNotifications } from '@/hooks/useNotifications';
 import { toast } from '@/hooks/use-toast';
-
-interface Task {
-  id: string;
-  text: string;
-  completed: boolean;
-  priority: 'high' | 'medium' | 'low';
-  dueDate?: Date;
-  reminderTime?: Date;
-  createdAt: Date;
-}
+import { useTasks, Task } from '@/hooks/useTasks';
+import { useAuth } from '@/contexts/AuthContext';
+import { EditTaskDialog } from '@/components/EditTaskDialog';
 
 interface TaskManagerProps {
   compact?: boolean;
 }
 
 export function TaskManager({ compact = false }: TaskManagerProps) {
-  const [tasks, setTasks] = useState<Task[]>([]);
   const [newTask, setNewTask] = useState('');
   const [newPriority, setNewPriority] = useState<'high' | 'medium' | 'low'>('medium');
   const [newDueDate, setNewDueDate] = useState<Date>();
   const [newReminderTime, setNewReminderTime] = useState<Date>();
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   
+  const { user } = useAuth();
+  const { tasks, loading, addTask, updateTask, deleteTask } = useTasks();
   const { scheduleNotification, requestPermission, permission } = useNotifications();
 
-  useEffect(() => {
-    const savedTasks = localStorage.getItem('focusflow-tasks');
-    if (savedTasks) {
-      const parsedTasks = JSON.parse(savedTasks).map((task: any) => ({
-        ...task,
-        dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
-        reminderTime: task.reminderTime ? new Date(task.reminderTime) : undefined,
-        createdAt: new Date(task.createdAt),
-      }));
-      setTasks(parsedTasks);
-    }
-  }, []);
+  if (!user) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center">
+          <p className="text-muted-foreground">Please sign in to manage your tasks.</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
-  useEffect(() => {
-    localStorage.setItem('focusflow-tasks', JSON.stringify(tasks));
-    
-    // Schedule notifications for tasks with reminder times
-    tasks.forEach(task => {
-      if (task.reminderTime && !task.completed && task.reminderTime > new Date()) {
-        const delay = task.reminderTime.getTime() - new Date().getTime();
-        scheduleNotification(
-          'Task Reminder',
-          `Don't forget: ${task.text}`,
-          delay
-        );
-      }
-    });
-  }, [tasks, scheduleNotification]);
-
-  const addTask = () => {
+  const handleAddTask = async () => {
     if (newTask.trim()) {
-      const task: Task = {
-        id: Date.now().toString(),
+      await addTask({
         text: newTask.trim(),
         completed: false,
         priority: newPriority,
-        dueDate: newDueDate,
-        reminderTime: newReminderTime,
-        createdAt: new Date(),
-      };
-      setTasks([task, ...tasks]);
+        due_date: newDueDate?.toISOString(),
+        reminder_time: newReminderTime?.toISOString(),
+      });
+      
       setNewTask('');
       setNewDueDate(undefined);
       setNewReminderTime(undefined);
@@ -90,39 +66,45 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
     }
   };
 
-  const toggleTask = (id: string) => {
-    setTasks(tasks.map(task => 
-      task.id === id ? { ...task, completed: !task.completed } : task
-    ));
+  const toggleTask = async (id: string) => {
+    const task = tasks.find(t => t.id === id);
+    if (task) {
+      await updateTask(id, { completed: !task.completed });
+    }
   };
 
-  const deleteTask = (id: string) => {
-    setTasks(tasks.filter(task => task.id !== id));
+  const handleDeleteTask = async (id: string) => {
+    await deleteTask(id);
   };
 
-  const toggleReminder = (id: string) => {
+  const toggleReminder = async (id: string) => {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
 
-    if (task.reminderTime) {
+    if (task.reminder_time) {
       // Remove reminder
-      setTasks(tasks.map(t => 
-        t.id === id ? { ...t, reminderTime: undefined } : t
-      ));
+      await updateTask(id, { reminder_time: undefined });
     } else {
       // Set reminder for 1 hour before due date, or 1 hour from now if no due date
-      const reminderTime = task.dueDate 
-        ? new Date(task.dueDate.getTime() - 60 * 60 * 1000)
+      const reminderTime = task.due_date 
+        ? new Date(new Date(task.due_date).getTime() - 60 * 60 * 1000)
         : new Date(Date.now() + 60 * 60 * 1000);
       
-      setTasks(tasks.map(t => 
-        t.id === id ? { ...t, reminderTime } : t
-      ));
+      await updateTask(id, { reminder_time: reminderTime.toISOString() });
       
       if (permission !== 'granted') {
         requestPermission();
       }
     }
+  };
+
+  const handleEditTask = (task: Task) => {
+    setEditingTask(task);
+    setEditDialogOpen(true);
+  };
+
+  const handleSaveEdit = async (id: string, updates: Partial<Task>) => {
+    await updateTask(id, updates);
   };
 
   const getPriorityColor = (priority: string) => {
@@ -134,16 +116,17 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
     }
   };
 
-  const getPriorityClass = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'priority-high';
-      case 'medium': return 'priority-medium';
-      case 'low': return 'priority-low';
-      default: return '';
-    }
-  };
-
   const displayTasks = compact ? tasks.slice(0, 3) : tasks;
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center">
+          <p className="text-muted-foreground">Loading tasks...</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -154,7 +137,7 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
               placeholder="Add a new task..."
               value={newTask}
               onChange={(e) => setNewTask(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && addTask()}
+              onKeyPress={(e) => e.key === 'Enter' && handleAddTask()}
               className="flex-1"
             />
             <Select value={newPriority} onValueChange={(value: 'high' | 'medium' | 'low') => setNewPriority(value)}>
@@ -180,7 +163,6 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
                   selected={newDueDate}
                   onSelect={setNewDueDate}
                   initialFocus
-                  className="pointer-events-auto"
                 />
               </PopoverContent>
             </Popover>
@@ -205,7 +187,6 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
                           setNewReminderTime(date);
                         }
                       }}
-                      className="pointer-events-auto"
                     />
                   </div>
                   <div>
@@ -225,7 +206,7 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
                 </div>
               </PopoverContent>
             </Popover>
-            <Button onClick={addTask} className="w-full sm:w-auto">
+            <Button onClick={handleAddTask} className="w-full sm:w-auto">
               <Plus className="w-4 h-4 mr-2" />
               Add
             </Button>
@@ -242,7 +223,7 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
           </Card>
         ) : (
           displayTasks.map((task) => (
-            <Card key={task.id} className={cn("transition-all hover:shadow-md", getPriorityClass(task.priority))}>
+            <Card key={task.id} className="transition-all hover:shadow-md">
               <CardContent className="p-4">
                 <div className="flex items-center space-x-3">
                   <Checkbox
@@ -257,14 +238,14 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
                       <Badge variant="secondary" className={getPriorityColor(task.priority)}>
                         {task.priority}
                       </Badge>
-                      {task.dueDate && (
+                      {task.due_date && (
                         <Badge variant="outline" className="text-xs">
-                          {format(task.dueDate, "MMM dd")}
+                          {format(new Date(task.due_date), "MMM dd")}
                         </Badge>
                       )}
-                      {task.reminderTime && (
+                      {task.reminder_time && (
                         <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">
-                          🔔 {format(task.reminderTime, "MMM dd, HH:mm")}
+                          🔔 {format(new Date(task.reminder_time), "MMM dd, HH:mm")}
                         </Badge>
                       )}
                     </div>
@@ -274,15 +255,23 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => toggleReminder(task.id)}
-                        className={task.reminderTime ? "text-blue-600" : "text-muted-foreground"}
+                        onClick={() => handleEditTask(task)}
+                        className="text-muted-foreground hover:text-foreground"
                       >
-                        {task.reminderTime ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
+                        <Edit className="w-4 h-4" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => deleteTask(task.id)}
+                        onClick={() => toggleReminder(task.id)}
+                        className={task.reminder_time ? "text-blue-600" : "text-muted-foreground"}
+                      >
+                        {task.reminder_time ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteTask(task.id)}
                         className="text-destructive hover:text-destructive"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -301,6 +290,13 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
           And {tasks.length - 3} more tasks...
         </p>
       )}
+
+      <EditTaskDialog
+        task={editingTask}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        onSave={handleSaveEdit}
+      />
     </div>
   );
 }

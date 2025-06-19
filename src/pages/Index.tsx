@@ -1,5 +1,6 @@
 
 import { useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
 import { ThemeProvider } from '@/components/ThemeProvider';
@@ -8,9 +9,25 @@ import { PomodoroTimer } from '@/components/PomodoroTimer';
 import { CalendarView } from '@/components/CalendarView';
 import { MotivationalQuote } from '@/components/MotivationalQuote';
 import { Header } from '@/components/Header';
+import { Button } from '@/components/ui/button';
+import { LogOut } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Index = () => {
   const [activeView, setActiveView] = useState('dashboard');
+  const { user, loading, signOut } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/auth" replace />;
+  }
 
   const renderContent = () => {
     switch (activeView) {
@@ -23,6 +40,13 @@ const Index = () => {
       default:
         return (
           <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h1 className="text-3xl font-bold">Welcome back, {user.user_metadata?.full_name || user.email}!</h1>
+              <Button variant="outline" onClick={signOut} className="flex items-center gap-2">
+                <LogOut className="w-4 h-4" />
+                Sign Out
+              </Button>
+            </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="glass-effect rounded-2xl p-6">
                 <h2 className="text-2xl font-bold mb-4 text-foreground">Quick Tasks</h2>

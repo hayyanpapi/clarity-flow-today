@@ -17,7 +17,7 @@ interface EditTaskDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (id: string, updates: Partial<Task>) => Promise<void>;
-  onAddReminder?: (taskId: string, reminderTime: string, label?: string) => Promise<void>;
+  onAddReminder?: (taskId: string, reminderTime: string, label?: string) => Promise<any>;
   onDeleteReminder?: (reminderId: string, taskId: string) => Promise<void>;
 }
 

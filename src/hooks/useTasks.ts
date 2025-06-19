@@ -31,7 +31,14 @@ export function useTasks() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setTasks(data || []);
+      
+      // Type assertion to ensure data matches our Task interface
+      const typedTasks = (data || []).map(task => ({
+        ...task,
+        priority: task.priority as 'high' | 'medium' | 'low'
+      })) as Task[];
+      
+      setTasks(typedTasks);
     } catch (error) {
       console.error('Error fetching tasks:', error);
       toast({
@@ -59,8 +66,14 @@ export function useTasks() {
         .single();
 
       if (error) throw error;
-      setTasks(prev => [data, ...prev]);
-      return data;
+      
+      const typedTask = {
+        ...data,
+        priority: data.priority as 'high' | 'medium' | 'low'
+      } as Task;
+      
+      setTasks(prev => [typedTask, ...prev]);
+      return typedTask;
     } catch (error) {
       console.error('Error adding task:', error);
       toast({
@@ -83,8 +96,14 @@ export function useTasks() {
         .single();
 
       if (error) throw error;
-      setTasks(prev => prev.map(task => task.id === id ? data : task));
-      return data;
+      
+      const typedTask = {
+        ...data,
+        priority: data.priority as 'high' | 'medium' | 'low'
+      } as Task;
+      
+      setTasks(prev => prev.map(task => task.id === id ? typedTask : task));
+      return typedTask;
     } catch (error) {
       console.error('Error updating task:', error);
       toast({

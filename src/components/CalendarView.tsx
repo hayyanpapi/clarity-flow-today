@@ -4,15 +4,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { format, isSameDay } from 'date-fns';
-
-interface Task {
-  id: string;
-  text: string;
-  completed: boolean;
-  priority: 'high' | 'medium' | 'low';
-  dueDate?: Date;
-  createdAt: Date;
-}
+import { useTasks } from '@/hooks/useTasks';
 
 interface CalendarViewProps {
   compact?: boolean;
@@ -20,23 +12,11 @@ interface CalendarViewProps {
 
 export function CalendarView({ compact = false }: CalendarViewProps) {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [tasks, setTasks] = useState<Task[]>([]);
-
-  useEffect(() => {
-    const savedTasks = localStorage.getItem('focusflow-tasks');
-    if (savedTasks) {
-      const parsedTasks = JSON.parse(savedTasks).map((task: any) => ({
-        ...task,
-        dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
-        createdAt: new Date(task.createdAt),
-      }));
-      setTasks(parsedTasks);
-    }
-  }, []);
+  const { tasks } = useTasks();
 
   const getTasksForDate = (date: Date) => {
     return tasks.filter(task => 
-      task.dueDate && isSameDay(task.dueDate, date)
+      task.due_date && isSameDay(new Date(task.due_date), date)
     );
   };
 
@@ -57,8 +37,8 @@ export function CalendarView({ compact = false }: CalendarViewProps) {
 
   if (compact) {
     const upcomingTasks = tasks
-      .filter(task => task.dueDate && task.dueDate >= new Date() && !task.completed)
-      .sort((a, b) => (a.dueDate!.getTime() - b.dueDate!.getTime()))
+      .filter(task => task.due_date && new Date(task.due_date) >= new Date() && !task.completed)
+      .sort((a, b) => new Date(a.due_date!).getTime() - new Date(b.due_date!).getTime())
       .slice(0, 3);
 
     return (
@@ -71,7 +51,7 @@ export function CalendarView({ compact = false }: CalendarViewProps) {
               <div className="flex-1 min-w-0">
                 <p className="truncate font-medium">{task.text}</p>
                 <p className="text-sm text-muted-foreground">
-                  {task.dueDate && format(task.dueDate, "MMM dd, yyyy")}
+                  {task.due_date && format(new Date(task.due_date), "MMM dd, yyyy")}
                 </p>
               </div>
               <Badge variant="secondary" className={getPriorityColor(task.priority)}>

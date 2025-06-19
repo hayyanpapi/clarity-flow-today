@@ -25,12 +25,11 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
   const [newTask, setNewTask] = useState('');
   const [newPriority, setNewPriority] = useState<'high' | 'medium' | 'low'>('medium');
   const [newDueDate, setNewDueDate] = useState<Date>();
-  const [newReminderTime, setNewReminderTime] = useState<Date>();
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   
   const { user } = useAuth();
-  const { tasks, loading, addTask, updateTask, deleteTask } = useTasks();
+  const { tasks, loading, addTask, updateTask, deleteTask, addReminder, deleteReminder } = useTasks();
   const { scheduleNotification, requestPermission, permission } = useNotifications();
 
   if (!user) {
@@ -50,19 +49,10 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
         completed: false,
         priority: newPriority,
         due_date: newDueDate?.toISOString(),
-        reminder_time: newReminderTime?.toISOString(),
       });
       
       setNewTask('');
       setNewDueDate(undefined);
-      setNewReminderTime(undefined);
-      
-      if (newReminderTime && permission !== 'granted') {
-        toast({
-          title: "Enable Notifications",
-          description: "Allow notifications to receive task reminders.",
-        });
-      }
     }
   };
 
@@ -75,27 +65,6 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
 
   const handleDeleteTask = async (id: string) => {
     await deleteTask(id);
-  };
-
-  const toggleReminder = async (id: string) => {
-    const task = tasks.find(t => t.id === id);
-    if (!task) return;
-
-    if (task.reminder_time) {
-      // Remove reminder
-      await updateTask(id, { reminder_time: undefined });
-    } else {
-      // Set reminder for 1 hour before due date, or 1 hour from now if no due date
-      const reminderTime = task.due_date 
-        ? new Date(new Date(task.due_date).getTime() - 60 * 60 * 1000)
-        : new Date(Date.now() + 60 * 60 * 1000);
-      
-      await updateTask(id, { reminder_time: reminderTime.toISOString() });
-      
-      if (permission !== 'granted') {
-        requestPermission();
-      }
-    }
   };
 
   const handleEditTask = (task: Task) => {
@@ -166,46 +135,6 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
                 />
               </PopoverContent>
             </Popover>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="w-full sm:w-auto">
-                  <Bell className="w-4 h-4 mr-2" />
-                  {newReminderTime ? format(newReminderTime, "MMM dd, HH:mm") : "Reminder"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-80 p-4" align="start">
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium">Reminder Date & Time</label>
-                    <Calendar
-                      mode="single"
-                      selected={newReminderTime}
-                      onSelect={(date) => {
-                        if (date) {
-                          const time = newReminderTime || new Date();
-                          date.setHours(time.getHours(), time.getMinutes());
-                          setNewReminderTime(date);
-                        }
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <Input
-                      type="time"
-                      value={newReminderTime ? format(newReminderTime, "HH:mm") : ""}
-                      onChange={(e) => {
-                        if (e.target.value && newReminderTime) {
-                          const [hours, minutes] = e.target.value.split(':');
-                          const newTime = new Date(newReminderTime);
-                          newTime.setHours(parseInt(hours), parseInt(minutes));
-                          setNewReminderTime(newTime);
-                        }
-                      }}
-                    />
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
             <Button onClick={handleAddTask} className="w-full sm:w-auto">
               <Plus className="w-4 h-4 mr-2" />
               Add
@@ -243,9 +172,9 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
                           {format(new Date(task.due_date), "MMM dd")}
                         </Badge>
                       )}
-                      {task.reminder_time && (
+                      {task.reminders && task.reminders.length > 0 && (
                         <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">
-                          🔔 {format(new Date(task.reminder_time), "MMM dd, HH:mm")}
+                          🔔 {task.reminders.length} reminder{task.reminders.length > 1 ? 's' : ''}
                         </Badge>
                       )}
                     </div>
@@ -259,14 +188,6 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
                         className="text-muted-foreground hover:text-foreground"
                       >
                         <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => toggleReminder(task.id)}
-                        className={task.reminder_time ? "text-blue-600" : "text-muted-foreground"}
-                      >
-                        {task.reminder_time ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
                       </Button>
                       <Button
                         variant="ghost"
@@ -296,6 +217,8 @@ export function TaskManager({ compact = false }: TaskManagerProps) {
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
         onSave={handleSaveEdit}
+        onAddReminder={addReminder}
+        onDeleteReminder={deleteReminder}
       />
     </div>
   );

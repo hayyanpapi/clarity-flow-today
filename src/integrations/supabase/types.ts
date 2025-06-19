@@ -33,6 +33,38 @@ export type Database = {
         }
         Relationships: []
       }
+      task_reminders: {
+        Row: {
+          created_at: string | null
+          id: string
+          label: string | null
+          reminder_time: string
+          task_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          label?: string | null
+          reminder_time: string
+          task_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          label?: string | null
+          reminder_time?: string
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_reminders_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
           completed: boolean | null
